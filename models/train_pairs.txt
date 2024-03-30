@@ -1,0 +1,4 @@
+0VB21E007-T11@9=person_whole_front.png    0VB21E007-T11@10=cloth_front.jpg
+0VB21E007-T11@9=person_whole_front.png    1FI21J006-A11@12=cloth_front.jpg
+0VB21E007-T11@9=person_whole_front.png    1FI21J006-C11@12=cloth_front.jpg
+0VB21E007-T11@9=person_whole_front.png    1MY21D08A-M11@15=cloth_front.jpg
