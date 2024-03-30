@@ -103,15 +103,7 @@ python train.py --model TFM --name TFM --dataroot path/to/MPV3D/data --warproot 
 ## License
 The use of this code and the MPV3D dataset is RESTRICTED to non-commercial research and educational purposes.
 
-## Citation
-If our code is helpful to your research, please cite:
-```
-@InProceedings{M3D-VTON,
-    author    = {Zhao, Fuwei and Xie, Zhenyu and Kampffmeyer, Michael and Dong, Haoye and Han, Songfang and Zheng, Tianxiang and Zhang, Tao and Liang, Xiaodan},
-    title     = {M3D-VTON: A Monocular-to-3D Virtual Try-On Network},
-    booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
-    month     = {October},
-    year      = {2021},
+
     pages     = {13239-13249}
 }
 ```
