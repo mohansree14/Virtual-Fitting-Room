@@ -1,7 +1,7 @@
 # M3D-VTON: A Monocular-to-3D Virtual Try-On Network
 Official code for ICCV2021 paper "M3D-VTON: A Monocular-to-3D Virtual Try-on Network"
 
-[Paper](https://arxiv.org/abs/2108.05126) | [Supplementary](https://figshare.com/s/eaa35bf3a6b14f783bd5) | [MPV3D Dataset](https://drive.google.com/file/d/1qcynpXZ9eSlzTV-RDCr-Yip3GcuU314h/view?usp=sharing) | [Pretrained Models](https://figshare.com/s/fad809619d2f9ac666fc)
+[Paper](https://drive.google.com/file/d/1p63RKK_iSCK52RXiZx-83Wc3sEBHbsoq/view?usp=drive_link)  | [MPV3D Dataset](https://drive.google.com/file/d/1qcynpXZ9eSlzTV-RDCr-Yip3GcuU314h/view?usp=sharing) | [Pretrained Models](https://figshare.com/s/fad809619d2f9ac666fc)
 
 ![M3D-VTON](/assets/teaser.gif "Teaser GIF")
 ## Requirements
