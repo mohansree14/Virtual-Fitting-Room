@@ -1,110 +1,78 @@
-# M3D-VTON: A Monocular-to-3D Virtual Try-On Network
-Official code for ICCV2021 paper "M3D-VTON: A Monocular-to-3D Virtual Try-on Network"
+# Virtual Fitting Room — 3D try-on from your own photos
 
-[Paper](https://drive.google.com/file/d/1p63RKK_iSCK52RXiZx-83Wc3sEBHbsoq/view?usp=drive_link)  | [MPV3D Dataset](https://drive.google.com/file/d/1qcynpXZ9eSlzTV-RDCr-Yip3GcuU314h/view?usp=sharing) | [Pretrained Models](https://figshare.com/s/fad809619d2f9ac666fc)
+Try a garment on a person from a single front photo and get a 3D, textured result back.
 
-![M3D-VTON](/assets/teaser.gif "Teaser GIF")
-## Requirements
-```python >= 3.8.0, pytorch == 1.6.0, torchvision == 0.7.0```
+![Try-on pipeline](/assets/teaser.gif)
 
-## Data Preparation
+## Built on M3D-VTON
 
-### MPV3D Dataset
-After downloading the [MPV3D Dataset](https://drive.google.com/file/d/1qcynpXZ9eSlzTV-RDCr-Yip3GcuU314h/view?usp=sharing), please run the following script to preprocess the data:
-```sh
-python util/data_preprocessing.py --MPV3D_root path/to/MPV3D/dataset
+The core model in this repo is **M3D-VTON** (Zhao et al., ICCV 2021). The code in `models/`, `data/`, `util/`, `train.py`, `test.py` and `rgbd2pcd.py` is theirs and is included unchanged, except where listed below. All credit for the network design and the MPV3D dataset goes to the original authors:
+
+- Paper: [M3D-VTON: A Monocular-to-3D Virtual Try-On Network](https://arxiv.org/abs/2108.05126)
+- Original repo: [fyviezhao/M3D-VTON](https://github.com/fyviezhao/M3D-VTON)
+
+## What I built on top
+
+The original repo works well on its benchmark dataset. To run it on **my own photos**, you need a pose file, a human parsing map, a cloth mask, a palm mask and image gradients, and you have to produce them with separate external tools. I wrote a lightweight preprocessing pipeline to generate all of these, and got the model running on a machine without a GPU.
+
+| File | What it does |
+|---|---|
+| `pose.py`, `human.py` | Extracts 18 body keypoints with OpenCV's DNN module and a COCO OpenPose Caffe model, saved in the OpenPose JSON format M3D-VTON expects. No full OpenPose build needed. |
+| `human.py` | Resizes person photos to 320×512, builds the palm mask (HSV skin segmentation, largest contour) and Sobel X/Y gradient maps. |
+| `segment.py` | Human segmentation map using torchvision's pretrained DeepLabV3-ResNet101. |
+| `cloth.py` | Resizes garment images and builds the cloth mask by thresholding. |
+| `visualize.py` | Automates the manual MeshLab steps (normal estimation and screened Poisson remeshing) with `pymeshlab` and `trimesh`. |
+| `options/base_options.py` | CPU fallback: defaults to CPU and only uses CUDA when it's available. |
+
+### Pipeline
+
+```
+person photo ─┬─ pose.py ────────► keypoints JSON
+              ├─ segment.py ─────► parsing map
+              └─ human.py ───────► palm mask, Sobel maps
+garment photo ── cloth.py ───────► cloth mask
+                        │
+                        ▼
+      M3D-VTON: MTM (warp) → DRM (depth) → TFM (texture)
+                        │
+                        ▼
+      rgbd2pcd.py → point cloud → visualize.py → 3D mesh
 ```
 
-### Custom Data
+### Known limitations
 
-If you want to process your own data, some more steps are needed (the &#8594; indicates the corresponding folder where the images should be put into):
+- The preprocessing scripts use hard-coded Windows paths. Edit the paths at the top of each script before running.
+- DeepLabV3 produces a person/background mask, not the fine-grained body-part labels M3D-VTON was trained on, so results on custom photos are rougher than on MPV3D.
+- The depth step in `human.py` is a grayscale placeholder, not a real depth estimate.
 
-1. prepare an in-shop clothing image *C* (&#8594; `mpv3d_example/cloth`) and a frontal person image *P* (&#8594; `mpv3d_example/image`) with resolution of 320*512;
+## Running it
 
-2. obtain the mask of *C* (&#8594; `mpv3d_example/cloth-mask`) by thresholding or using [remove.bg](https://www.remove.bg/);
+Requirements: `python >= 3.8`, `pytorch == 1.6.0`, `torchvision == 0.7.0`, `opencv-python`, plus `trimesh` and `pymeshlab` for remeshing. Download the [pretrained models](https://figshare.com/s/fad809619d2f9ac666fc) and the OpenPose COCO weights (`pose_iter_440000.caffemodel`).
 
-3. obtain the human segmentation layout (&#8594; `mpv3d_example/image-parse`) by applying [2D-Human-Paring](https://github.com/fyviezhao/2D-Human-Parsing) on *P*;
+1. Preprocess your photos: run `human.py`, `pose.py`, `segment.py` and `cloth.py`.
+2. Run the three modules in order:
+   ```sh
+   python test.py --model MTM --name MTM --dataroot example --datalist test_pairs --results_dir results
+   python test.py --model DRM --name DRM --dataroot example --datalist test_pairs --results_dir results
+   python test.py --model TFM --name TFM --dataroot example --datalist test_pairs --results_dir results
+   ```
+3. Build the 3D result: `python rgbd2pcd.py`, then `python visualize.py`.
 
-4. obtain the human joints (&#8594; `mpv3d_example/pose`) by applying [OpenPose](https://github.com/CMU-Perceptual-Computing-Lab/openpose) (25 keypoints) on *P*;
-
-5. run the data processing script `python util/data_preprocessing.py --MPV3D_root mpv3d_example` to automatically obtain the remaining inputs (pre-aligned clothing, palm mask, and image gradients);
-
-6. now the data preparation is finished and you should be able to run inference with the steps described in the next section "Running Inference". 
-
-## Running Inference
-We provide demo inputs under the `mpv3d_example` folder, where the target clothing and the reference person are like:
-
-![Demo inputs](/assets/demo_inputs.png)
-
-with inputs from the `mpv3d_example` folder, the easiest way to get start is to use the [pretrained models](https://figshare.com/s/fad809619d2f9ac666fc) and sequentially run the four steps below:
-
-### 1. Testing MTM Module
-```sh
-python test.py --model MTM --name MTM --dataroot mpv3d_example --datalist test_pairs --results_dir results
-```
-
-### 2. Testing DRM Module
-```sh
-python test.py --model DRM --name DRM --dataroot mpv3d_example --datalist test_pairs --results_dir results
-```  
-
-### 3. Testing TFM Module
-```sh
-python test.py --model TFM --name TFM --dataroot mpv3d_example --datalist test_pairs --results_dir results
-```
-
-### 4. Getting colored point cloud and Remeshing
-
-(Note: since the back-side person images are unavailable, in `rgbd2pcd.py` we provide a fast face inpainting function that produces the mirrored back-side image after a fashion. One may need manually inpaint other back-side texture areas to achieve better visual quality.)
-
-```sh
-python rgbd2pcd.py
-```
-
-Now you should get the point cloud file prepared for remeshing under `results/aligned/pcd/test_pairs/*.ply`. [MeshLab](https://www.meshlab.net/) can be used to remesh the predicted point cloud, with two simple steps below:
-
-- Normal Estimation: Open MeshLab and load the point cloud file, and then go to Filters --> Normals, Curvatures and Orientation --> Compute normals for point sets
-
-- Possion Remeshing: Go to Filters --> Remeshing, Simplification and Reconstruction --> Surface Reconstruction: Screen Possion (set reconstruction depth = 9)
-
-Now the final 3D try-on result should be obtained:
-
-![Try-on Result](/assets/meshlab_snapshot.png "Try-on Result")
-
-## Training on MPV3D Dataset
-
-With the pre-processed MPV3D dataset, you can train the model from scratch by folllowing the three steps below:
-
-### 1. Train MTM module
-
-```sh
-python train.py --model MTM --name MTM --dataroot path/to/MPV3D/data --datalist train_pairs --checkpoints_dir path/for/saving/model
-```
-
-then run the command below to obtain the `--warproot` (here refers to the `--results_dir`) which is necessary for the other two modules:
-```sh
-python test.py --model MTM --name MTM --dataroot path/to/MPV3D/data --datalist train_pairs --checkpoints_dir path/to/saved/MTMmodel --results_dir path/for/saving/MTM/results
-```
-
-### 2. Train DRM module
-
-```sh
-python train.py --model DRM --name DRM --dataroot path/to/MPV3D/data --warproot path/to/MTM/warp/cloth --datalist train_pairs --checkpoints_dir path/for/saving/model
-```
-
-### 3. Train TFM module
-
-```sh
-python train.py --model TFM --name TFM --dataroot path/to/MPV3D/data --warproot path/to/MTM/warp/cloth --datalist train_pairs --checkpoints_dir path/for/saving/model
-```
-
-(See options/base_options.py and options/train_options.py for more training options.)
+For training on the MPV3D dataset, see the [original repo](https://github.com/fyviezhao/M3D-VTON#training-on-mpv3d-dataset).
 
 ## License
-The use of this code and the MPV3D dataset is RESTRICTED to non-commercial research and educational purposes.
 
+The M3D-VTON code and the MPV3D dataset are restricted to **non-commercial research and educational use**. This project follows the same terms.
 
+## Citation
+
+```
+@InProceedings{M3D-VTON,
+    author    = {Zhao, Fuwei and Xie, Zhenyu and Kampffmeyer, Michael and Dong, Haoye and Han, Songfang and Zheng, Tianxiang and Zhang, Tao and Liang, Xiaodan},
+    title     = {M3D-VTON: A Monocular-to-3D Virtual Try-On Network},
+    booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
+    month     = {October},
+    year      = {2021},
     pages     = {13239-13249}
 }
 ```
-
