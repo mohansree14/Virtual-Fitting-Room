@@ -17,8 +17,8 @@ The original repo works well on its benchmark dataset. To run it on **my own pho
 
 | File | What it does |
 |---|---|
-| `pose.py`, `human.py` | Extracts 18 body keypoints with OpenCV's DNN module and a COCO OpenPose Caffe model, saved in the OpenPose JSON format M3D-VTON expects. No full OpenPose build needed. |
-| `human.py` | Resizes person photos to 320×512, builds the palm mask (HSV skin segmentation, largest contour) and Sobel X/Y gradient maps. |
+| `pose.py` | Extracts 18 body keypoints with OpenCV's DNN module and a COCO OpenPose Caffe model, saved in the OpenPose JSON format M3D-VTON expects. No full OpenPose build needed. |
+| `human.py` | Resizes person photos to 320×512, builds the palm mask (HSV skin segmentation, largest contour) and Sobel X/Y gradient maps, then runs `pose.py`. All of a person photo's preprocessing in one command. |
 | `segment.py` | Human segmentation map using torchvision's pretrained DeepLabV3-ResNet101. |
 | `cloth.py` | Resizes garment images and builds the cloth mask by thresholding. |
 | `visualize.py` | Automates the manual MeshLab steps (normal estimation and screened Poisson remeshing) with `pymeshlab` and `trimesh`. |
@@ -41,7 +41,6 @@ garment photo ── cloth.py ───────► cloth mask
 
 ### Known limitations
 
-- The preprocessing scripts use hard-coded Windows paths. Edit the paths at the top of each script before running.
 - DeepLabV3 produces a person/background mask, not the fine-grained body-part labels M3D-VTON was trained on, so results on custom photos are rougher than on MPV3D.
 - The depth step in `human.py` is a grayscale placeholder, not a real depth estimate.
 
@@ -49,14 +48,20 @@ garment photo ── cloth.py ───────► cloth mask
 
 Requirements: `python >= 3.8`, `pytorch == 1.6.0`, `torchvision == 0.7.0`, `opencv-python`, plus `trimesh` and `pymeshlab` for remeshing. Download the [pretrained models](https://figshare.com/s/fad809619d2f9ac666fc) and the OpenPose COCO weights (`pose_iter_440000.caffemodel`).
 
-1. Preprocess your photos: run `human.py`, `pose.py`, `segment.py` and `cloth.py`.
+1. Preprocess your photos. Name the person photo like the dataset (`<id>=person_whole_front.png`, garment as `.jpg`) so the loader finds every file. Each script writes into the matching subfolder of `--dataroot`:
+   ```sh
+   python cloth.py   example/cloth/shirt.jpg --dataroot example
+   python human.py   example/image/me=person_whole_front.png --dataroot example   # resize, palm mask, Sobel, pose, depth
+   python segment.py example/image/me=person_whole_front.png --dataroot example
+   ```
+   `pose.py` can also be run on its own. It looks for `openpose_pose_coco.prototxt` and `pose_iter_440000.caffemodel` in the repo root, or you can pass `--prototxt` and `--caffemodel`.
 2. Run the three modules in order:
    ```sh
    python test.py --model MTM --name MTM --dataroot example --datalist test_pairs --results_dir results
    python test.py --model DRM --name DRM --dataroot example --datalist test_pairs --results_dir results
    python test.py --model TFM --name TFM --dataroot example --datalist test_pairs --results_dir results
    ```
-3. Build the 3D result: `python rgbd2pcd.py`, then `python visualize.py`.
+3. Build the 3D result: `python rgbd2pcd.py`, then `python visualize.py results/aligned/pcd/test_pairs/<name>.ply`.
 
 For training on the MPV3D dataset, see the [original repo](https://github.com/fyviezhao/M3D-VTON#training-on-mpv3d-dataset).
 

@@ -1,46 +1,26 @@
+"""Resize garment images to 320x512 and build their masks by thresholding.
+
+usage: python cloth.py example/cloth/shirt.jpg [more.jpg ...] --dataroot example
+"""
+import argparse
+import os
+
 import cv2
 from PIL import Image
-org_path1=r"D:\vtryon_workout\M3D-VTON\example\cloth\shirt_back_test_1.PNG"
-org_path2=r"D:\vtryon_workout\M3D-VTON\example\cloth\shirt_front_test1.PNG"
-cloth_1=cv2.imread(org_path1)
-cloth_2=cv2.imread(org_path2)
-def resize_img(path):
-    c = Image.open(path)
-    c = c.resize((320, 512), Image.BICUBIC).convert('RGB')
-    c.save(path)
-cv2.imwrite(r"D:\vtryon_workout\M3D-VTON\example\cloth\shirt_back_test_1.PNG",cloth_1)
-resize_img(r"D:\vtryon_workout\M3D-VTON\example\cloth\shirt_back_test_1.PNG")
-cv2.imwrite(r"D:\vtryon_workout\M3D-VTON\example\cloth\shirt_front_test1.PNG",cloth_2)
-resize_img(r"D:\vtryon_workout\M3D-VTON\example\cloth\shirt_front_test1.PNG")
 
-resize_img(r"D:\vtryon_workout\M3D-VTON\example\image\back_test1-removebg-preview.png")
-resize_img(r"D:\vtryon_workout\M3D-VTON\example\image\front_test1-removebg-preview.png")
-#mask
+parser = argparse.ArgumentParser()
+parser.add_argument('images', nargs='+', help='garment images (.jpg) on a light background, resized in place')
+parser.add_argument('--dataroot', default='example')
+parser.add_argument('--threshold', type=int, default=200, help='pixels brighter than this count as background')
+opt = parser.parse_args()
 
-cloth=cv2.imread(r"D:\vtryon_workout\M3D-VTON\example\cloth\shirt_front_test1.PNG")
-import cv2
-import numpy as np
+mask_dir = os.path.join(opt.dataroot, 'cloth-mask')
+os.makedirs(mask_dir, exist_ok=True)
 
-# Read the image
-image = cloth
-
-# Convert the image to grayscale
-gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-# Apply thresholding to create a binary mask
-_, mask = cv2.threshold(gray_image, 200, 255, cv2.THRESH_BINARY)
-
-# Invert the mask
-mask = 255 - mask
-
-# Display the mask
-cv2.imshow('Mask', mask)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-
-# Save the mask
-cv2.imwrite(r"D:\vtryon_workout\M3D-VTON\example\cloth-mask\shirt_front_test1.PNG", mask)
-
-
-
-
+for path in opt.images:
+    Image.open(path).resize((320, 512), Image.BICUBIC).convert('RGB').save(path)
+    gray = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(gray, opt.threshold, 255, cv2.THRESH_BINARY_INV)
+    out = os.path.join(mask_dir, os.path.basename(path).replace('.jpg', '_mask.jpg'))
+    cv2.imwrite(out, mask)
+    print('Saved', out)

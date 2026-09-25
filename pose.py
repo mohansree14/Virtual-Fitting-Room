@@ -1,53 +1,51 @@
-import cv2
-import numpy as np
+"""Extract 18 COCO body keypoints with OpenCV DNN and save them as OpenPose JSON.
+
+usage: python pose.py example/image/me=person_whole_front.png --dataroot example
+"""
+import argparse
 import json
+import os
 
-# Load the pretrained model and deploy prototxt file
-net = cv2.dnn.readNetFromCaffe(r"D:\vtryon_workout\M3D-VTON\openpose_pose_coco.prototxt", r"D:\vtryon_workout\M3D-VTON\pose_iter_440000.caffemodel")
-
-# Read input image
-image = cv2.imread(r"D:\vtryon_workout\M3D-VTON\example\image\back_test1-removebg-preview.png")
-
-# Prepare image for inference
-width, height = image.shape[1], image.shape[0]
-net.setInput(cv2.dnn.blobFromImage(image, 1.0, (width, height), (0, 0, 0), swapRB=False, crop=False))
-
-# Forward pass through the network to get the output
-output = net.forward()
-
-# Convert float32 values to regular floats
-output = output.astype(float)
-
-# Parse the output to extract keypoints
-keypoints = []
-for i in range(0, output.shape[2]):
-    # Extract confidence score
-    confidence = output[0, 0, i, 2]
-    if confidence > 0.01:  # Adjust threshold as needed
-        # Key points location
-        x = int(output[0, 0, i, 3] * width)
-        y = int(output[0, 0, i, 4] * height)
-        keypoints.append(x) 
-        keypoints.append(y)
-        keypoints.append(float(confidence)) # Convert confidence to float
-
-# Convert keypoints to JSON format
-json_data = {
-    "version": 1.3,
-    "people": [{
-        "person_id": -1,
-        "pose_keypoints_2d": keypoints,
-        "face_keypoints_2d": [],  # You can add facial keypoints if needed
-        "hand_left_keypoints_2d": [],  # You can add hand keypoints if needed
-        "hand_right_keypoints_2d": []  # You can add hand keypoints if needed
-    }]
-}
-
-# Save JSON data to a file
-with open(r"D:\vtryon_workout\M3D-VTON\example\pose\back_test1-removebg-preview_keypoints.json", "w") as outfile:
-    json.dump(json_data, outfile)
+import cv2
 
 
-cv2.imshow("Pose Estimation", image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+def predict_keypoints(img_file, prototxt, caffemodel, threshold=0.05, size=368):
+    net = cv2.dnn.readNetFromCaffe(prototxt, caffemodel)
+    img = cv2.imread(img_file)
+    img_h, img_w, _ = img.shape
+    net.setInput(cv2.dnn.blobFromImage(img, 1.0 / 255, (size, size), (0, 0, 0), swapRB=False, crop=False))
+    output = net.forward()
+    H, W = output.shape[2], output.shape[3]
+
+    points = []
+    for idx in range(18):  # 18 keypoints in the COCO model
+        _, prob, _, point = cv2.minMaxLoc(output[0, idx, :, :])  # peak of the confidence map
+        if prob > threshold:
+            points += [img_w * point[0] / W, img_h * point[1] / H, prob]
+        else:
+            points += [0, 0, 0]
+    return points
+
+
+def save_pose(img_file, dataroot, prototxt, caffemodel):
+    out_dir = os.path.join(dataroot, 'pose')
+    os.makedirs(out_dir, exist_ok=True)
+    out_file = os.path.join(out_dir, os.path.basename(img_file).replace('.png', '_keypoints.json'))
+    points = predict_keypoints(img_file, prototxt, caffemodel)
+    with open(out_file, 'w') as f:
+        json.dump({"version": 1, "people": [{"pose_keypoints_2d": points}]}, f, indent=4)
+    print('Saved', out_file)
+
+
+def add_model_args(parser):
+    parser.add_argument('--prototxt', default='openpose_pose_coco.prototxt')
+    parser.add_argument('--caffemodel', default='pose_iter_440000.caffemodel')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('image', help='person image (.png)')
+    parser.add_argument('--dataroot', default='example')
+    add_model_args(parser)
+    opt = parser.parse_args()
+    save_pose(opt.image, opt.dataroot, opt.prototxt, opt.caffemodel)
